@@ -1,96 +1,102 @@
+require('dotenv').config();
+
 const axios = require("axios");
 
 // WooCommerce API credentials
-const WooCommerceAPI = "***";
-const key = "***";
-const secret = "***";
+const WooCommerceAPI = process.env.WOO_API_URL;
+const key = process.env.KEY;
+const secret = process.env.SECRET;
 
 // AutoGestor API GET
-const autoGestorAPI = "***";
+const autoGestorAPI = process.env.AC_API_URL;
 
 // transmission mapping from AutoGestor to WooCommerce tags IDs
 const transmissionMapping = {
-  "automatico": 55,
-  "manual": 56,
-  "cvt": 87,
-  "pdk": 88,
+  "automatico": 258,
+  "manual": 259,
+  "cvt": 260,
+  "pdk": 261,
 };
 
 // brand mapping from AutoGestor to WooCommerce category IDs
 const brandMapping = {
-  "audi": 97,
-  "bmw": 98,
-  "byd": 100,
-  "chery": 101,
-  "chevrolet": 102,
-  "citroen": 103,
-  "fiat": 104,
-  "ford": 105,
-  "harley davidson": 106,
-  "honda": 107,
-  "hyundai": 108,
-  "jaguar": 109,
-  "jeep": 110,
-  "kia": 111,
-  "land rover": 112,
-  "mercedes_benz": 113,
-  "mitsubishi": 114,
-  "nissan": 115,
-  "porsche": 116,
-  "ram": 117,
-  "renault": 118,
-  "suzuki": 119,
-  "toyota": 120,
-  "volkswagen": 99,
-  "volvo": 121,
+  "audi": 15,
+  "bmw": 21,
+  "byd": 250,
+  "chery": 22,
+  "chevrolet": 30,
+  "citroen": 256,
+  "fiat": 198,
+  "ford": 199,
+  "harley davidson": 31,
+  "honda": 33,
+  "hyundai": 29,
+  "jaguar": 27,
+  "jeep": 23,
+  "kia": 254,
+  "land rover": 255,
+  "mercedes-benz": 25,
+  "mitsubishi": 253,
+  "nissan": 197,
+  "porsche": 28,
+  "ram": 194,
+  "renault": 32,
+  "suzuki": 257,
+  "toyota": 200,
+  "volkswagen": 26,
+  "volvo": 24,
 };
 
 // color mapping from AutoGestor to WooCommerce tags IDs
 const colorMapping = {
-  "azul": 71,
-  "bege": 72,
-  "branco": 73,
-  "cinza": 74,
-  "dourado": 75,
-  "laranja": 76,
-  "prata": 77,
-  "preto": 78,
-  "rosa": 79,
-  "verde": 80,
-  "vermelho": 81,
+  "azul": 262,
+  "bege": 263,
+  "branco": 264,
+  "cinza": 265,
+  "dourado": 266,
+  "laranja": 267,
+  "prata": 268,
+  "preto": 269,
+  "rosa": 270,
+  "verde": 271,
+  "vermelho": 272,
 };
 
 // fuel mapping from AutoGestor to WooCommerce tags IDs
 const fuelMapping = {
-  "diesel": 82,
-  "eletrico": 83,
-  "flex": 84,
-  "gasolina": 85,
-  "hibrido": 86,
+  "diesel": 273,
+  "eletrico": 274, 
+  "flex": 275, 
+  "gasolina": 276, 
+  "hibrido": 277, 
 };
 
 // door mapping from AutoGestor to WooCommerce tags IDs
 const doorMapping = {
-  2: 122,
-  4: 90,
+  2: 278,
+  4: 279,
 };
 
 // Utility function to make Axios requests with retry logic
 async function axiosRequestWithRetry(config, maxRetries = 15) {
   let retries = 0;
+  const backoff = (retryCount) => Math.min(1000 * Math.pow(2, retryCount), 10000); // Exponential backoff up to 30 seconds
+
   while (retries < maxRetries) {
     try {
-      const response = await axios(config);
+      const response = await axios({
+        ...config,
+        timeout: 60000, // Example: 60 seconds timeout
+      });
       return response;
     } catch (error) {
       if (error.code === 'ECONNABORTED' || error.response?.status >= 500) {
-        // Retry on connection aborted or 5xx errors
         retries++;
-        //console.error(`Request failed (Attempt ${retries} of ${maxRetries}). Retrying...`, error);
-        console.error(`Request failed (Attempt ${retries} of ${maxRetries}). Retrying...`);
-        await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for 5 seconds before retrying
+        console.error(`Request failed (Attempt ${retries} of ${maxRetries}). Retrying in ${backoff(retries)}ms...`);
+        await new Promise(resolve => setTimeout(resolve, backoff(retries)));
       } else {
-        throw error; // Do not retry on other errors
+        console.error("Non-retriable error:", error);
+        throw error;
       }
     }
   }
@@ -170,7 +176,7 @@ async function createProductsInWooCommerce(vehicles) {
   for (let i = 0; i < vehicles.length; i += batchSize) {
     const batch = vehicles.slice(i, i + batchSize);
     const data = batch.map(vehicle => {
-      const { codigo, modelo, marca, ano_modelo, descricao, preco, fotos, categoria, cambio, combustivel, cor, portas, acessorios } = vehicle;
+      const { codigo, modelo, marca, versao, ano_modelo, descricao, preco, fotos, categoria, cambio, combustivel, cor, portas, acessorios } = vehicle;
       const sku = codigo.toString();
       const categoryID = brandMapping[marca.toLowerCase()] || "";
 
@@ -191,7 +197,7 @@ async function createProductsInWooCommerce(vehicles) {
       const accessoriesList = acessorios.map(accessory => `- ${accessory}`).join('\n');
 
       return {
-        name: `${marca} ${modelo} ${ano_modelo}`,
+        name: `${versao}`,
         type: "simple",
         catalog_visibility: "visible",
         description: `${descricao || ""}\n\n<b>Lista de Acessórios:</b>\n${accessoriesList}`,
@@ -249,7 +255,7 @@ async function updateProductsInWooCommerce(updates) {
     const batch = updates.slice(i, i + batchSize);
     const data = batch.map(({ vehicle, wooCommerceData }) => {
       const { id } = wooCommerceData;
-      const { codigo, modelo, marca, ano_modelo, descricao, preco, fotos, cambio, combustivel, cor, portas, acessorios } = vehicle;
+      const { codigo, modelo, marca, versao, ano_modelo, descricao, preco, fotos, cambio, combustivel, cor, portas, acessorios } = vehicle;
       const categoryID = brandMapping[marca.toLowerCase()] || "";
 
       const tags = [];
@@ -270,7 +276,7 @@ async function updateProductsInWooCommerce(updates) {
 
       return {
         id,
-        name: `${marca} ${modelo} ${ano_modelo}`,
+        name: `${versao}`,
         description: `${descricao || ""}\n\n<b>Lista de Acessórios:</b>\n${accessoriesList}`,
         regular_price: convertCurrency(preco.venda).toFixed(2),
         images: fotos.map((src) => ({ src })),
@@ -298,13 +304,14 @@ async function updateProductsInWooCommerce(updates) {
 
     try {
       const response = await axiosRequestWithRetry(config);
-      console.log("Batch updated successfully:", response.data);
+      //console.log("Batch updated successfully:", response.data);
+      console.log("Batch updated successfully:");
       // Optionally log more detailed information
       batch.forEach(product => {
         console.log(`Updated product ID ${product.id}`);
       });
     } catch (error) {
-      console.error("Error updating batch:", error);
+      console.error("Error updating batch: \n", error);
       // Optionally handle error cases or log specific errors
     }
   }));
@@ -333,7 +340,7 @@ function verifyDataMatch(autoGestorData, wooCommerceData) {
     return false;
   }
 
-  const { modelo, marca, ano_modelo, descricao, preco, fotos, categoria, cambio, combustivel, cor, portas, acessorios } = autoGestorData;
+  const { modelo, marca, ano_modelo, versao,  descricao, preco, fotos, categoria, cambio, combustivel, cor, portas, acessorios } = autoGestorData;
 
   const categoryID = brandMapping[marca.toLowerCase()] || "";
   const tags = [
@@ -352,7 +359,7 @@ function verifyDataMatch(autoGestorData, wooCommerceData) {
 
   // Compare all relevant fields
   const isMatch =
-    wooCommerceData.name === `${marca} ${modelo} ${ano_modelo}` &&
+    wooCommerceData.name === `${versao}` &&
     wooCommerceData.short_description === "" &&
     //wooCommerceData.description === expectedDescription && // this is not working due to the formating coming from woocommerce, something that I couldn't replicate.
     wooCommerceData.sku === autoGestorData.codigo.toString() &&
@@ -362,13 +369,9 @@ function verifyDataMatch(autoGestorData, wooCommerceData) {
     tags.every(tag => wooTags.includes(tag));
 
   if (!isMatch) {
-    console.log("wooCategories.includes(categoryID): ", wooCategories.includes(categoryID));
-    console.log("tags.every(tag => wooTags.includes(tag)): ", tags.every(tag => wooTags.includes(tag)));
     console.log(`Data doesn't match for SKU [ ${autoGestorData.codigo} ]...`);
-    console.log("----- \n");
   } else {
     console.log(`Data matches for SKU [ ${autoGestorData.codigo} ]!`);
-    console.log("----- \n");
   }
 
   return isMatch;
@@ -391,34 +394,48 @@ function convertCurrency(currencyString) {
 
 // Function to check for changes
 async function checkForChanges() {
-  console.log("\n\n------------------------------------------------------");
   console.log("START OF VERIFICATION PROCESS");
-  console.log("------------------------------------------------------\n\n");
-  try {
-    const vehicles = await fetchDataFromAutoGestorWithRetry();
-    const updates = [];
 
-    for (const vehicle of vehicles) {
-      const sku = vehicle.codigo.toString();
-      const wooProduct = await fetchProductFromWooCommerce(sku);
+  let retryCount = 0;
+  const maxRetries = 30; // Maximum number of retries
 
-      if (!verifyDataMatch(vehicle, wooProduct)) {
-        updates.push({ vehicle, wooCommerceData: wooProduct });
+  while (retryCount < maxRetries) {
+    try {
+      const vehicles = await fetchDataFromAutoGestorWithRetry();
+      const updates = [];
+
+      for (const vehicle of vehicles) {
+        const sku = vehicle.codigo.toString();
+        const wooProduct = await fetchProductFromWooCommerce(sku);
+
+        if (!verifyDataMatch(vehicle, wooProduct)) {
+          updates.push({ vehicle, wooCommerceData: wooProduct });
+        }
+      }
+
+      if (updates.length > 0) {
+        await updateProductsInWooCommerce(updates); // Batch update the WooCommerce products if there's a mismatch
+      } else {
+        console.log("No updates needed.");
+      }
+
+      // If successful, break out of the retry loop
+      break;
+    } catch (error) {
+      if (error.code === 'ECONNRESET' || error.code === 'ECONNABORTED') {
+        retryCount++;
+        console.error(`Verification process failed (Attempt ${retryCount} of ${maxRetries}). Retrying...`);
+        continue; // Retry the process
+      } else {
+        console.error("Verification process encountered an unexpected error:", error);
+        break; // Exit retry loop on unexpected error
       }
     }
-
-    if (updates.length > 0) {
-      await updateProductsInWooCommerce(updates); // Batch update the WooCommerce products if there's a mismatch
-    } else {
-      console.log("No updates needed.");
-    }
-  } catch (error) {
-    console.error("Verification process error:", error);
   }
-  console.log("\n\n------------------------------------------------------");
+
   console.log("END OF VERIFICATION PROCESS");
-  console.log("------------------------------------------------------");
 }
+
 
 // Function to fetch all products from woocommerce
 async function fetchAllProductsFromWooCommerce(page = 1, allProducts = []) {
@@ -429,6 +446,7 @@ async function fetchAllProductsFromWooCommerce(page = 1, allProducts = []) {
       Authorization: "Basic " + Buffer.from(key + ":" + secret).toString("base64"),
       "Content-Type": "application/json",
     },
+    timeout: 30000, // Add a timeout to each request
   };
 
   const response = await axiosRequestWithRetry(config);
@@ -484,20 +502,32 @@ async function deleteProductsFromWooCommerce(productIds) {
       //console.log(`Deleted product with ID ${id}:`, response.data);
       console.log(`Deleted product with ID ${id}.`);
     } catch (error) {
-      console.error(`Error deleting product with ID ${id}:`, error);
+      //console.error(`Error deleting product with ID ${id}:`, error);
+      console.error(`Error deleting product with ID ${id}:`);
     }
+  }
+}
+
+async function removeOrphanedProducts(autoGestorSkus) {
+  const allProducts = await fetchAllProductsFromWooCommerce();
+  const productsToRemove = allProducts.filter(product => !autoGestorSkus.has(product.sku));
+
+  if (productsToRemove.length > 0) {
+    const productIdsToRemove = productsToRemove.map(product => product.id);
+    await deleteProductsFromWooCommerce(productIdsToRemove);
+  } else {
+    console.log("No orphaned products found.");
   }
 }
 
 
 // Main function to orchestrate the process
 async function main() {
-  console.log("\n\n------------------------------------------------------");
   console.log("START OF PROCESSING");
-  console.log("------------------------------------------------------\n\n");
   try {
     const vehicles = await fetchDataFromAutoGestorWithRetry();
     const productsToCreate = [];
+    const autoGestorSkus = new Set(vehicles.map(vehicle => vehicle.codigo.toString()));
 
     for (const vehicle of vehicles) {
       const sku = vehicle.codigo.toString();
@@ -527,16 +557,17 @@ async function main() {
       console.log("No duplicates found.");
     }
 
+    // Remove orphaned products
+    await removeOrphanedProducts(autoGestorSkus);
+
     // Call checkForChanges to verify and log any data mismatches
     await checkForChanges();
 
   } catch (error) {
     console.error("Main process error:", error);
   }
-  console.log("\n\n------------------------------------------------------");
   console.log("END OF PROCESSING");
-  console.log("\n----- \n All products created in WooCommerce. \n----- \n");
-  console.log("------------------------------------------------------\n\n\n");
+  console.log("\nAll products created and verified in WooCommerce.\n");
 }
 
 // Run the main function
