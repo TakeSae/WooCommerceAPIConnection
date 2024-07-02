@@ -2,85 +2,83 @@ require('dotenv').config();
 
 const axios = require("axios");
 
-// WooCommerce API credentials
+// APIs management
 const WooCommerceAPI = process.env.WOO_API_URL;
 const key = process.env.KEY;
 const secret = process.env.SECRET;
-
-// AutoGestor API GET
-const autoGestorAPI = process.env.AC_API_URL;
+const autoGestorAPI = process.env.AG_API_URL;
 
 // transmission mapping from AutoGestor to WooCommerce tags IDs
 const transmissionMapping = {
-  "automatico": 258,
-  "manual": 259,
-  "cvt": 260,
-  "pdk": 261,
+  "automatico": '',
+  "manual": '',
+  "cvt": '',
+  "pdk": '',
 };
 
 // brand mapping from AutoGestor to WooCommerce category IDs
 const brandMapping = {
-  "audi": 15,
-  "bmw": 21,
-  "byd": 250,
-  "chery": 22,
-  "chevrolet": 30,
-  "citroen": 256,
-  "fiat": 198,
-  "ford": 199,
-  "harley davidson": 31,
-  "honda": 33,
-  "hyundai": 29,
-  "jaguar": 27,
-  "jeep": 23,
-  "kia": 254,
-  "land rover": 255,
-  "mercedes-benz": 25,
-  "mitsubishi": 253,
-  "nissan": 197,
-  "porsche": 28,
-  "ram": 194,
-  "renault": 32,
-  "suzuki": 257,
-  "toyota": 200,
-  "volkswagen": 26,
-  "volvo": 24,
+  "audi": '',
+  "bmw": '',
+  "byd": '',
+  "chery": '',
+  "chevrolet": '',
+  "citroen": '',
+  "fiat": '',
+  "ford": '',
+  "harley davidson": '',
+  "honda": '',
+  "hyundai": '',
+  "jaguar": '',
+  "jeep": '',
+  "kia": '',
+  "land rover": '',
+  "mercedes-benz": '',
+  "mitsubishi": '',
+  "nissan": '',
+  "porsche": '',
+  "ram": '',
+  "renault": '',
+  "suzuki": '',
+  "toyota": '',
+  "volkswagen": '',
+  "volvo": '',
 };
 
 // color mapping from AutoGestor to WooCommerce tags IDs
 const colorMapping = {
-  "azul": 262,
-  "bege": 263,
-  "branco": 264,
-  "cinza": 265,
-  "dourado": 266,
-  "laranja": 267,
-  "prata": 268,
-  "preto": 269,
-  "rosa": 270,
-  "verde": 271,
-  "vermelho": 272,
+  "azul": '',
+  "bege": '',
+  "branco": '',
+  "cinza": '',
+  "dourado": '',
+  "laranja": '',
+  "prata": '',
+  "preto": '',
+  "rosa": '',
+  "verde": '',
+  "vermelho": '',
 };
 
 // fuel mapping from AutoGestor to WooCommerce tags IDs
 const fuelMapping = {
-  "diesel": 273,
-  "eletrico": 274, 
-  "flex": 275, 
-  "gasolina": 276, 
-  "hibrido": 277, 
+  "diesel": '',
+  "eletrico": '', 
+  "flex": '', 
+  "gasolina": '', 
+  "hibrido": '', 
 };
 
 // door mapping from AutoGestor to WooCommerce tags IDs
 const doorMapping = {
-  2: 278,
-  4: 279,
+  2: '',
+  4: '',
 };
 
 // Utility function to make Axios requests with retry logic
-async function axiosRequestWithRetry(config, maxRetries = 15) {
+async function axiosRequestWithRetry(config, maxRetries = 20) {
   let retries = 0;
-  const backoff = (retryCount) => Math.min(1000 * Math.pow(2, retryCount), 10000); // Exponential backoff up to 30 seconds
+  const backoff = (retryCount) => Math.min(1000 * Math.pow(2, retryCount), 4000); // Exponential backoff up to 30 seconds
 
   while (retries < maxRetries) {
     try {
@@ -176,7 +174,7 @@ async function createProductsInWooCommerce(vehicles) {
   for (let i = 0; i < vehicles.length; i += batchSize) {
     const batch = vehicles.slice(i, i + batchSize);
     const data = batch.map(vehicle => {
-      const { codigo, modelo, marca, versao, ano_modelo, descricao, preco, fotos, categoria, cambio, combustivel, cor, portas, acessorios } = vehicle;
+      const { codigo, modelo, marca, versao, ano_modelo, descricao, preco, fotos, categoria, cambio, combustivel, cor, portas, acessorios, km } = vehicle;
       const sku = codigo.toString();
       const categoryID = brandMapping[marca.toLowerCase()] || "";
 
@@ -197,10 +195,10 @@ async function createProductsInWooCommerce(vehicles) {
       const accessoriesList = acessorios.map(accessory => `- ${accessory}`).join('\n');
 
       return {
-        name: `${versao}`,
+        name: `${versao} ${ano_modelo}`,
         type: "simple",
         catalog_visibility: "visible",
-        description: `${descricao || ""}\n\n<b>Lista de Acessórios:</b>\n${accessoriesList}`,
+        description: `${descricao || ""}\n\n<b>Kilometragem: ${km} km</b>\n\n<b>Lista de Acessórios:</b>\n${accessoriesList}`,
         short_description: "",
         sku: sku,
         regular_price: convertCurrency(preco.venda).toFixed(2), // Convert price to WooCommerce format
@@ -255,7 +253,7 @@ async function updateProductsInWooCommerce(updates) {
     const batch = updates.slice(i, i + batchSize);
     const data = batch.map(({ vehicle, wooCommerceData }) => {
       const { id } = wooCommerceData;
-      const { codigo, modelo, marca, versao, ano_modelo, descricao, preco, fotos, cambio, combustivel, cor, portas, acessorios } = vehicle;
+      const { codigo, modelo, marca, versao, ano_modelo, descricao, preco, fotos, cambio, combustivel, cor, portas, acessorios, km } = vehicle;
       const categoryID = brandMapping[marca.toLowerCase()] || "";
 
       const tags = [];
@@ -276,8 +274,9 @@ async function updateProductsInWooCommerce(updates) {
 
       return {
         id,
-        name: `${versao}`,
-        description: `${descricao || ""}\n\n<b>Lista de Acessórios:</b>\n${accessoriesList}`,
+        name: `${versao} ${ano_modelo}`,
+        description: `${descricao || ""}\n\n<b>Kilometragem: ${km} km</b>\n\n<b>Lista de Acessórios:</b>\n${accessoriesList}`,
+        short_description: "",
         regular_price: convertCurrency(preco.venda).toFixed(2),
         images: fotos.map((src) => ({ src })),
         categories: [{ id: categoryID }],
@@ -340,7 +339,7 @@ function verifyDataMatch(autoGestorData, wooCommerceData) {
     return false;
   }
 
-  const { modelo, marca, ano_modelo, versao,  descricao, preco, fotos, categoria, cambio, combustivel, cor, portas, acessorios } = autoGestorData;
+  const { modelo, marca, ano_modelo, versao,  descricao, preco, fotos, categoria, cambio, combustivel, cor, portas, acessorios, km } = autoGestorData;
 
   const categoryID = brandMapping[marca.toLowerCase()] || "";
   const tags = [
@@ -359,7 +358,7 @@ function verifyDataMatch(autoGestorData, wooCommerceData) {
 
   // Compare all relevant fields
   const isMatch =
-    wooCommerceData.name === `${versao}` &&
+    wooCommerceData.name === `${versao} ${ano_modelo}` &&
     wooCommerceData.short_description === "" &&
     //wooCommerceData.description === expectedDescription && // this is not working due to the formating coming from woocommerce, something that I couldn't replicate.
     wooCommerceData.sku === autoGestorData.codigo.toString() &&
@@ -436,7 +435,6 @@ async function checkForChanges() {
   console.log("END OF VERIFICATION PROCESS");
 }
 
-
 // Function to fetch all products from woocommerce
 async function fetchAllProductsFromWooCommerce(page = 1, allProducts = []) {
   const config = {
@@ -508,6 +506,7 @@ async function deleteProductsFromWooCommerce(productIds) {
   }
 }
 
+// Function to remove orphaned products from woocommerce
 async function removeOrphanedProducts(autoGestorSkus) {
   const allProducts = await fetchAllProductsFromWooCommerce();
   const productsToRemove = allProducts.filter(product => !autoGestorSkus.has(product.sku));
@@ -519,7 +518,6 @@ async function removeOrphanedProducts(autoGestorSkus) {
     console.log("No orphaned products found.");
   }
 }
-
 
 // Main function to orchestrate the process
 async function main() {
